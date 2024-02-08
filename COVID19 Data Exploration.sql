@@ -9,11 +9,11 @@ Order by 3,4
 
 -- Delete Rows with Location == Israel
 Delete 
-From CovidDeaths 
+From PortfolioProject.dbo.CovidDeaths 
 Where Location = 'Israel'
 
 Delete 
-From CovidVaccinations 
+From PortfolioProject.dbo.CovidVaccinations
 Where Location = 'Israel'
 
 
@@ -87,4 +87,109 @@ Group by location
 Order By TotalDeathCount desc
 
 
+-- Global Numbers
+-- Total cases percentage worldwide
+Select SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, 
+	(SUM(cast(new_deaths as int))/SUM(new_cases))*100 as DeathPercentage
+From PortfolioProject..CovidDeaths
+Where continent is not null
+Order By 1,2 
 
+
+-- Cases worldwide by date
+Select date, SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, 
+	(SUM(cast(new_deaths as int))/SUM(new_cases))*100 as DeathPercentage
+From PortfolioProject..CovidDeaths
+Where continent is not null
+Group by date
+Order By 1,2 
+
+
+-- Joining Deaths data and Vaccinations data
+Select *
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+
+
+-- Looking at Total Population vs Vaccinations
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+Where dea.continent is not null
+Order by 2, 3
+
+
+-- Looking at Total Population vs Vaccinations with Total Vaccinations per day for Each Country
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location 
+	Order by dea.location, dea.date) as RollingPeopleVaccinated
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+Where dea.continent is not null
+Order by 2, 3
+
+
+--Use CTE
+With PopvsVac (Continent, Location, Date, Population, new_vaccinations, RollingPeopleVaccinated)
+as
+(
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location 
+	Order by dea.location, dea.date) as RollingPeopleVaccinated
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+Where dea.continent is not null
+)
+
+Select *, (RollingPeopleVaccinated/Population)*100 
+From PopvsVac
+
+
+--Temp Table
+
+Drop Table if exists #PercentPopulationVaccinated
+Create Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+new_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+
+Insert into #PercentPopulationVaccinated
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location 
+	Order by dea.location, dea.date) as RollingPeopleVaccinated
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+
+Select *, (RollingPeopleVaccinated/Population)*100 
+From #PercentPopulationVaccinated
+
+
+--Creating View for Data Visualizations
+Create View PercentPopulationVaccinated as
+Select dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+	SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location 
+	Order by dea.location, dea.date) as RollingPeopleVaccinated
+From PortfolioProject..CovidDeaths dea
+Join PortfolioProject..CovidVaccinations vac
+	On dea.location = vac.location
+	and dea.date = vac.date
+Where dea.continent is not null
+
+
+Select *
+From PercentPopulationVaccinated
